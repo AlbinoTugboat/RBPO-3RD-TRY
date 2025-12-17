@@ -1,0 +1,30 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'main'
+
+stages:
+  - build
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+cache:
+  paths:
+    - .m2/repository/
+    - target/
+
+build:
+  stage: build
+  tags:
+    - sass-linux-small-amd64  # Ваш собственный раннер
+  image: eclipse-temurin:21-jdk
+  before_script:
+    # Устанавливаем Maven вручную для образа с только JDK
+    - apt-get update && apt-get install -y maven
+  script:
+    - chmod +x ./mvnw
+    - ./mvnw clean test package
+  artifacts:
+    paths:
+      - ./target/*.jar
+    expire_in: 1 week
