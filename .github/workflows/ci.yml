@@ -79,5 +79,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: reports-owasp
-          path: reports/
+          path: target/dependency-check-report.html
           retention-days: 14
