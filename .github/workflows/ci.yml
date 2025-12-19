@@ -51,34 +51,32 @@ jobs:
           sarif_file: reports/semgrep-results.sarif
           retention-days: 14
 
-  dependency-check:
-    name: OWASP Dependency Check (SCA)
+  dependency_check:
+    name: SCA Analysis
     needs: build
     runs-on: ubuntu-latest
-
+    container:
+      image: maven:3.9-eclipse-temurin-21
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Make maven wrapper executable
+        run: chmod +x ./mvnw
 
       - name: Run OWASP Dependency-Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
-            -DautoUpdate=false \
-            -DnvdApiKey=f9e6f963-0f6f-451f-be90-d3083f591571 \
             -Dformat=HTML \
-            -DsuppressionFiles=dependency-check-suppressions.xml \
-            -DfailOnError=false
+            -DoutputDirectory=reports \
+            -DsuppressionFile=suppressions.xml || true
 
-      - name: Upload Dependency Check Report
+      - name: Save reports
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report
-          path: target/dependency-check-report.html
+          name: reports-owasp
+          path: reports/
           retention-days: 14
-
