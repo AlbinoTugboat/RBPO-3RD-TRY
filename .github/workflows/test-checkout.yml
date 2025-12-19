@@ -1,0 +1,19 @@
+name: Test Checkout Access
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug PR Context
+        run: |
+          echo "PR Number: ${{ github.event.pull_request.number }}"
+          echo "PR Head Repo: ${{ github.event.pull_request.head.repo.full_name }}"
+          echo "PR Base Repo: ${{ github.event.pull_request.base.repo.full_name }}"
+          echo "GITHUB_REPOSITORY: $GITHUB_REPOSITORY"
+
+      - name: Simple Checkout
+        uses: actions/checkout@v4
