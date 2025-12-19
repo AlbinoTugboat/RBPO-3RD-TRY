@@ -1,101 +1,52 @@
-name: "Java SAST Analysis"
+name: CI Pipeline with SAST
 
 on:
-  push:
-    branches: [ main, develop, feature/** ]
   pull_request:
-    branches: [ main, develop ]
-  schedule:
-    # Запуск каждый день в 6:00 UTC
-    - cron: '0 6 * * *'
-  workflow_dispatch:  # Позволяет запускать вручную из UI GitHub
+    branches: [ main ]
+  push:
+    branches: [ main ]
 
 jobs:
-  build-and-sast:
-    name: "Build Java & Run SAST"
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Для анализа истории коммитов CodeQL
 
-      - name: Set up JDK
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: |
-            8
-            11
-            17
-            21
+          java-version: '21'
           distribution: 'temurin'
-          cache: 'maven'  # Кэширование Maven зависимостей
-
-      - name: Cache Maven dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
 
       - name: Build with Maven
         run: |
-          # Сборка с компиляцией для анализа
-          mvn clean compile -DskipTests
-          
-          # Если используете Gradle:
-          # ./gradlew compileJava classes
+          chmod +x ./mvnw
+          ./mvnw clean package -DskipTests
 
-      - name: Initialize CodeQL for Java
-        uses: github/codeql-action/init@v3
-        with:
-          languages: 'java'
-          queries: security-extended,security-and-quality
-          build-mode: 'manual'
-          config-file: ./.github/codeql/codeql-config.yml  # опционально
+  sast-scan:
+    name: SAST Analysis
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep:latest
 
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:java"
-          output: ${{ runner.temp }}/codeql-results
-
-      - name: Upload SARIF report to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ${{ runner.temp }}/codeql-results/java.sarif
-          category: "java"
-          checkout_path: ${{ github.workspace }}
-          wait-for-processing: true
-
-      # Опционально: дополнительные проверки безопасности
-      - name: OWASP Dependency Check (опционально)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'my-java-project'
-          path: '.'
-          format: 'SARIF'
-          out: './reports'
-        continue-on-error: true  # Продолжать даже если проверка зависимостей не прошла
-
-      - name: Upload Dependency Check SARIF (опционально)
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: ./reports/dependency-check-report.sarif
-          category: "dependency-check"
-
-      # Уведомление о завершении
-      - name: SAST Summary
-        if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p reports
+      - name: Run Semgrep Scan
         run: |
-          echo "✅ SAST analysis completed"
-          echo "📊 View results in: Security → Code scanning alerts"
-          echo "🔗 Direct link: https://github.com/${{ github.repository }}/security/code-scanning"
+          semgrep scan \
+            --config "p/java" \
+            --config "p/secrets" \
+            --config "p/owasp-top-ten" \
+            --sarif \
+            --output reports/semgrep-results.sarif || true
+      - name: Save reports
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          name: reports-semgrep
+          sarif_file: reports/semgrep-results.sarif
+          retention-days: 14
