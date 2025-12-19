@@ -1,8 +1,12 @@
-name: CI Pipeline
+name: CI Pipeline with SAST
 
 on:
   pull_request:
     branches: [ main ]
+
+# Разрешения для загрузки security-отчетов
+permissions:
+  security-events: write
 
 jobs:
   build:
@@ -37,3 +41,28 @@ jobs:
           name: target-jars
           path: target/*.jar
           retention-days: 7
+
+  semgrep-sast:
+    # Запускается ТОЛЬКО после успешной сборки
+    needs: build
+    runs-on: ubuntu-latest
+    # Наследуем разрешения от workflow
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep SAST Scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+          outputFormat: sarif
+          outputFile: semgrep-report.sarif
+
+      - name: Upload SARIF results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-report.sarif
