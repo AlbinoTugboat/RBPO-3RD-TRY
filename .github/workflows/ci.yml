@@ -44,15 +44,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      # Вариант 1: Использовать конкретные правила вместо auto (рекомендуется)
+
       - name: Run Semgrep SAST Scan
-        run: |
-          # Для Java проекта используем правила безопасности Java
-          semgrep scan \
-            --config "p/security-audit" \
-            --sarif \
-            --output semgrep-report.sarif \
-            --error
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: "p/security-audit"
+          outputFormat: sarif
+          outputFile: semgrep-results.sarif
 
       # ИЛИ Вариант 2: Использовать auto с метриками (проще)
       # - name: Run Semgrep SAST Scan
@@ -63,16 +61,7 @@ jobs:
       #       --output semgrep-report.sarif \
       #       --error
 
-      - name: Verify SARIF report exists
-        run: |
-          if [ -f "semgrep-report.sarif" ]; then
-            echo "✅ Файл отчёта успешно создан."
-            echo "Размер файла: $(wc -l < semgrep-report.sarif) строк"
-          else
-            echo "❌ ОШИБКА: файл semgrep-report.sarif не найден."
-            ls -la
-            exit 1
-          fi
+
 
       - name: Upload SARIF results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
