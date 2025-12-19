@@ -98,14 +98,7 @@
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
                 <version>9.0.9</version>
-                <configuration>
-                    <nvdApiKey>f9e6f963-0f6f-451f-be90-d3083f591571</nvdApiKey>
-                    <!-- Увеличенные таймауты -->
-                    <connectionTimeout>600000</connectionTimeout>
-                    <readTimeout>600000</readTimeout>
-                    <!-- Попытка использовать зеркало данных вместо прямого API -->
-                    <dataMirrorType>NVD CVE/CPE Data Mirror</dataMirrorType>
-                </configuration>
+
             </plugin>
         </plugins>
     </build>
