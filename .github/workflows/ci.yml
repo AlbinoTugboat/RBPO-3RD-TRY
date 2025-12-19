@@ -1,8 +1,8 @@
 name: CI Pipeline with SAST
 
 on:
-  pull_request:
-    branches: [ main ]
+  push:
+    branches: [ task3branch ]
 
 # Разрешения для загрузки security-отчетов
 permissions:
