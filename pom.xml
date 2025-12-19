@@ -21,6 +21,11 @@
 
     <dependencies>
         <dependency>
+        <groupId>org.owasp</groupId>
+        <artifactId>dependency-check-maven</artifactId>
+        <version>12.1.9</version>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
@@ -93,12 +98,6 @@
                         </exclude>
                     </excludes>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.owasp</groupId>
-                <artifactId>dependency-check-maven</artifactId>
-                <version>9.0.9</version>
-
             </plugin>
         </plugins>
     </build>
