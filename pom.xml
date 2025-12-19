@@ -101,8 +101,8 @@
                 <configuration>
                     <nvdApiKey>f9e6f963-0f6f-451f-be90-d3083f591571</nvdApiKey>
                     <!-- Увеличенные таймауты -->
-                    <connectionTimeout>60000</connectionTimeout>
-                    <readTimeout>60000</readTimeout>
+                    <connectionTimeout>600000</connectionTimeout>
+                    <readTimeout>600000</readTimeout>
                     <!-- Попытка использовать зеркало данных вместо прямого API -->
                     <dataMirrorType>NVD CVE/CPE Data Mirror</dataMirrorType>
                 </configuration>
