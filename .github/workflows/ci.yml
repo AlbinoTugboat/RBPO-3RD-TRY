@@ -1,69 +1,98 @@
-name: CI Pipeline with SAST
+name: "Build and SAST Analysis"
 
 on:
+  push:
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  push:
-    branches: [ main ]
+  schedule:
+    # Еженедельный запуск по понедельникам в 9:00 UTC
+    - cron: '0 9 * * 1'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Необходимо для анализа всей истории коммитов
 
-      - name: Set up JDK 21
+      - name: Set up JDK (пример для Java, измените под свой язык)
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      - name: Build with Maven
+      - name: Build application
         run: |
-          chmod +x ./mvnw
-          ./mvnw clean package -DskipTests
+          # Замените команды сборки на свои
+          mvn clean compile
+          # или для других языков:
+          # npm run build
+          # dotnet build
+          # go build ./...
 
-  semgrep-sast:
-    needs: build
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Дополнительные настройки:
+          # queries: security-extended,security-and-quality
+          # config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          # Если хотите обрабатывать предупреждения как ошибки:
+          # severity: error
+
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ github.workspace }}/codeql-analysis.sarif
+          # или для сканирования в разных директориях:
+          # sarif_file: ${{ github.workspace }}/**/codeql-analysis.sarif
+          wait-for-processing: true
+
+      # Опционально: дополнительные шаги для уведомлений
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            console.log('SAST analysis failed! Check the report in Security tab.')
+
+  sast-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'java', 'javascript', 'python' ]  # Укажите нужные языки
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-
-    permissions:
-      security-events: write
-      contents: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Semgrep
-        run: |
-          python -m pip install --upgrade pip
-          pip install semgrep
-
-
-      - name: Run Semgrep SAST Scan
-        uses: returntocorp/semgrep-action@v1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
-          config: "p/security-audit"
-          outputFormat: sarif
-          outputFile: semgrep-results.sarif
+          languages: ${{ matrix.language }}
 
-      # ИЛИ Вариант 2: Использовать auto с метриками (проще)
-      # - name: Run Semgrep SAST Scan
-      #   run: |
-      #     semgrep scan \
-      #       --config auto \
-      #       --sarif \
-      #       --output semgrep-report.sarif \
-      #       --error
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
 
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
 
-
-      - name: Upload SARIF results to GitHub Security
+      - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: semgrep-report.sarif
+          sarif_file: ${{ github.workspace }}/codeql-analysis.sarif
