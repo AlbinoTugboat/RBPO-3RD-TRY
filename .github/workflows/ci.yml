@@ -50,3 +50,4 @@ jobs:
           name: reports-semgrep
           sarif_file: reports/semgrep-results.sarif
           retention-days: 14
+
