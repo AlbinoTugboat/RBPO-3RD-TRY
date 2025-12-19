@@ -73,7 +73,7 @@ jobs:
             -DnvdApiKey=${{secrets.NVD_API_KEY}} \
             -Dformat=HTML \
             -DoutputDirectory=reports \
-            -DsuppressionFile=suppressions.xml || true
+            -DfailOnError=false
 
       - name: Save reports
         uses: actions/upload-artifact@v4
