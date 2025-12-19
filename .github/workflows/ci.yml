@@ -24,13 +24,13 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-#      - name: Cache Maven dependencies
-#        uses: actions/cache@v3
-#        with:
-#          path: ~/.m2/repository
-#          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-#          restore-keys: |
-#            ${{ runner.os }}-maven-
+      #      - name: Cache Maven dependencies
+      #        uses: actions/cache@v3
+      #        with:
+      #          path: ~/.m2/repository
+      #          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+      #          restore-keys: |
+      #            ${{ runner.os }}-maven-
 
       - name: Build and test with Maven
         run: |
@@ -44,13 +44,7 @@ jobs:
           path: target/*.jar
           retention-days: 7
 
-      # == КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ ИСХОДНИКИ ==
-      - name: Upload source code for SAST
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-code
-          path: ./
-          retention-days: 1
+
 
   semgrep-sast:
     needs: build
@@ -60,19 +54,33 @@ jobs:
       contents: read
 
     steps:
-      - name: Download source code
-        uses: actions/download-artifact@v4
+      - name: Checkout repository for SAST
+        uses: actions/checkout@v4
         with:
-          name: source-code
+          ssh-key: ${{ secrets.REPO_SSH_KEY }}
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
 
       - name: Run Semgrep SAST Scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: auto
-          outputFormat: sarif
-          outputFile: semgrep-report.sarif
+        run: |
+          semgrep scan --config auto --sarif --output semgrep-report.sarif .
+
+      - name: Verify SARIF report exists
+        run: |
+          if [ -f "semgrep-report.sarif" ]; then
+            echo "✅ Файл отчёта успешно создан."
+            echo "Размер файла: $(wc -l < semgrep-report.sarif) строк"
+          else
+            echo "❌ ОШИБКА: файл semgrep-report.sarif не найден."
+            echo "Содержимое директории:"
+            ls -la
+            exit 1
+          fi
 
       - name: Upload SARIF results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-report.sarif
