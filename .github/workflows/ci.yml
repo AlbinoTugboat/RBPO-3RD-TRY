@@ -1,98 +1,101 @@
-name: "Build and SAST Analysis"
+name: "Java SAST Analysis"
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, feature/** ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   schedule:
-    # Еженедельный запуск по понедельникам в 9:00 UTC
-    - cron: '0 9 * * 1'
+    # Запуск каждый день в 6:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:  # Позволяет запускать вручную из UI GitHub
 
 jobs:
-  build:
+  build-and-sast:
+    name: "Build Java & Run SAST"
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Необходимо для анализа всей истории коммитов
+          fetch-depth: 0  # Для анализа истории коммитов CodeQL
 
-      - name: Set up JDK (пример для Java, измените под свой язык)
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: |
+            8
+            11
+            17
+            21
           distribution: 'temurin'
+          cache: 'maven'  # Кэширование Maven зависимостей
 
-      - name: Build application
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build with Maven
         run: |
-          # Замените команды сборки на свои
-          mvn clean compile
-          # или для других языков:
-          # npm run build
-          # dotnet build
-          # go build ./...
+          # Сборка с компиляцией для анализа
+          mvn clean compile -DskipTests
+          
+          # Если используете Gradle:
+          # ./gradlew compileJava classes
 
-      - name: Initialize CodeQL
+      - name: Initialize CodeQL for Java
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-          # Дополнительные настройки:
-          # queries: security-extended,security-and-quality
-          # config-file: ./.github/codeql/codeql-config.yml
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+          languages: 'java'
+          queries: security-extended,security-and-quality
+          build-mode: 'manual'
+          config-file: ./.github/codeql/codeql-config.yml  # опционально
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
-          # Если хотите обрабатывать предупреждения как ошибки:
-          # severity: error
+          category: "/language:java"
+          output: ${{ runner.temp }}/codeql-results
 
-      - name: Upload SARIF report
+      - name: Upload SARIF report to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: ${{ github.workspace }}/codeql-analysis.sarif
-          # или для сканирования в разных директориях:
-          # sarif_file: ${{ github.workspace }}/**/codeql-analysis.sarif
+          sarif_file: ${{ runner.temp }}/codeql-results/java.sarif
+          category: "java"
+          checkout_path: ${{ github.workspace }}
           wait-for-processing: true
 
-      # Опционально: дополнительные шаги для уведомлений
-      - name: Notify on failure
-        if: failure()
-        uses: actions/github-script@v6
+      # Опционально: дополнительные проверки безопасности
+      - name: OWASP Dependency Check (опционально)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: dependency-check/Dependency-Check_Action@main
         with:
-          script: |
-            console.log('SAST analysis failed! Check the report in Security tab.')
+          project: 'my-java-project'
+          path: '.'
+          format: 'SARIF'
+          out: './reports'
+        continue-on-error: true  # Продолжать даже если проверка зависимостей не прошла
 
-  sast-matrix:
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [ 'java', 'javascript', 'python' ]  # Укажите нужные языки
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{ matrix.language }}"
-
-      - name: Upload SARIF report
+      - name: Upload Dependency Check SARIF (опционально)
+        if: ${{ github.event_name == 'pull_request' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: ${{ github.workspace }}/codeql-analysis.sarif
+          sarif_file: ./reports/dependency-check-report.sarif
+          category: "dependency-check"
+
+      # Уведомление о завершении
+      - name: SAST Summary
+        if: always()
+        run: |
+          echo "✅ SAST analysis completed"
+          echo "📊 View results in: Security → Code scanning alerts"
+          echo "🔗 Direct link: https://github.com/${{ github.repository }}/security/code-scanning"
