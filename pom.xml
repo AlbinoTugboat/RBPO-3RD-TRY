@@ -106,7 +106,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <nvdApiKey>${{ secrets.NVD_API_KEY }</nvdApiKey>
+                    <nvdApiKey>${{secrets.NVD_API_KEY}</nvdApiKey>
                     <!-- Увеличение задержки для надёжности -->
                     <nvdApiDelay>6000</nvdApiDelay>
                     <format>HTML</format> <!-- Формат отчёта -->

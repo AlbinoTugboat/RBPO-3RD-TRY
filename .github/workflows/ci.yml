@@ -69,6 +69,7 @@ jobs:
       - name: Run OWASP Dependency-Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
+            -DnvdApiKey=${{ secrets.NVD_API_KEY }} \
             -Dformat=HTML \
             -DsuppressionFiles=dependency-check-suppressions.xml \
             -DfailOnError=false
