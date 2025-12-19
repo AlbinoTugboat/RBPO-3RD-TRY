@@ -4,9 +4,12 @@ workflow:
 
 stages:
   - build
+  - test
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  SAST_ANALYZER_IMAGE_SEMGREP: "semgrep/semgrep"
+  SAST_EXCLUDED_PATHS: "spec, test, tests, tmp, vendor"
 
 cache:
   paths:
@@ -16,10 +19,9 @@ cache:
 build:
   stage: build
   tags:
-    - sass-linux-small-amd64  # Ваш собственный раннер
+    - sass-linux-small-amd64
   image: eclipse-temurin:21-jdk
   before_script:
-    # Устанавливаем Maven вручную для образа с только JDK
     - apt-get update && apt-get install -y maven
   script:
     - chmod +x ./mvnw
@@ -28,3 +30,28 @@ build:
     paths:
       - ./target/*.jar
     expire_in: 1 week
+
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+
+
+
+
+semgrep-sast:
+  stage: test
+  tags:
+    - sass-linux-small-amd64
+  image: semgrep/semgrep:latest # Ключевое изменение: используем образ Semgrep
+  variables:
+    SEMGREP_RULES: "auto"
+  script:
+    - semgrep scan --config ${SEMGREP_RULES} --sarif --output semgrep-report.sarif .
+  artifacts:
+    reports:
+      sast: semgrep-report.sarif
+    expire_in: 1 week
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
