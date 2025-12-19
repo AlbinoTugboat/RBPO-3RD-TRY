@@ -42,18 +42,26 @@ jobs:
           path: target/*.jar
           retention-days: 7
 
+      # == КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ЗАГРУЖАЕМ ИСХОДНИКИ ==
+      - name: Upload source code for SAST
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-code
+          path: ./
+          retention-days: 1
+
   semgrep-sast:
-    # Запускается ТОЛЬКО после успешной сборки
     needs: build
     runs-on: ubuntu-latest
-    # Наследуем разрешения от workflow
     permissions:
       security-events: write
       contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download source code
+        uses: actions/download-artifact@v4
+        with:
+          name: source-code
 
       - name: Run Semgrep SAST Scan
         uses: returntocorp/semgrep-action@v1
