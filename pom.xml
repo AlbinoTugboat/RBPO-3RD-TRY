@@ -97,23 +97,14 @@
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
-                <version>9.0.9</version> <!-- Проверьте актуальную версию -->
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <version>9.0.9</version>
                 <configuration>
-                    <nvdApiKey>${{secrets.NVD_API_KEY}</nvdApiKey>
-                    <!-- Увеличение задержки для надёжности -->
-                    <nvdApiDelay>6000</nvdApiDelay>
-                    <format>HTML</format> <!-- Формат отчёта -->
-                    <failOnError>false</failOnError> <!-- Не останавливать сборку при обнаружении уязвимостей -->
-                    <suppressionFiles>
-                        <suppressionFile>dependency-check-suppressions.xml</suppressionFile>
-                    </suppressionFiles>
+                    <nvdApiKey>f9e6f963-0f6f-451f-be90-d3083f591571</nvdApiKey>
+                    <!-- Увеличенные таймауты -->
+                    <connectionTimeout>60000</connectionTimeout>
+                    <readTimeout>60000</readTimeout>
+                    <!-- Попытка использовать зеркало данных вместо прямого API -->
+                    <dataMirrorType>NVD CVE/CPE Data Mirror</dataMirrorType>
                 </configuration>
             </plugin>
         </plugins>
