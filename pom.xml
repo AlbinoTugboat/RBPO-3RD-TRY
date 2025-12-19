@@ -106,6 +106,9 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <nvdApiKey>${{ secrets.NVD_API_KEY }</nvdApiKey>
+                    <!-- Увеличение задержки для надёжности -->
+                    <nvdApiDelay>6000</nvdApiDelay>
                     <format>HTML</format> <!-- Формат отчёта -->
                     <failOnError>false</failOnError> <!-- Не останавливать сборку при обнаружении уязвимостей -->
                     <suppressionFiles>
