@@ -6,12 +6,6 @@ on:
   push:
     branches: [ main ]
 
-# Разрешения для загрузки security-отчетов
-permissions:
-  security-events: write
-  contents: read
-  actions: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,9 +14,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          # Убираем SSH ключ для проверки
-          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -30,55 +21,53 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build and test with Maven
+      - name: Build with Maven
         run: |
           chmod +x ./mvnw
-          ./mvnw clean test package -DskipTests
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: target-jars
-          path: target/*.jar
-          retention-days: 7
+          ./mvnw clean package -DskipTests
 
   semgrep-sast:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
     permissions:
       security-events: write
       contents: read
-      actions: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install Semgrep
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
 
+      # Вариант 1: Использовать конкретные правила вместо auto (рекомендуется)
       - name: Run Semgrep SAST Scan
         run: |
+          # Для Java проекта используем правила безопасности Java
           semgrep scan \
-            --config auto \
+            --config "p/security-audit" \
             --sarif \
             --output semgrep-report.sarif \
-            --error \
-            --metrics=off
+            --error
+
+      # ИЛИ Вариант 2: Использовать auto с метриками (проще)
+      # - name: Run Semgrep SAST Scan
+      #   run: |
+      #     semgrep scan \
+      #       --config auto \
+      #       --sarif \
+      #       --output semgrep-report.sarif \
+      #       --error
 
       - name: Verify SARIF report exists
         run: |
           if [ -f "semgrep-report.sarif" ]; then
             echo "✅ Файл отчёта успешно создан."
             echo "Размер файла: $(wc -l < semgrep-report.sarif) строк"
-            # Проверяем содержимое
-            head -20 semgrep-report.sarif
           else
             echo "❌ ОШИБКА: файл semgrep-report.sarif не найден."
             ls -la
@@ -89,6 +78,3 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-report.sarif
-          # Добавляем token для безопасности
-          token: ${{ secrets.GITHUB_TOKEN }}
-          wait-for-processing: false
