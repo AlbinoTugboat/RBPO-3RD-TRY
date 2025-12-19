@@ -38,21 +38,20 @@ include:
 
 
 
-sast:
+semgrep-sast:
   stage: test
   tags:
     - sass-linux-small-amd64
+  image: semgrep/semgrep:latest # Ключевое изменение: используем образ Semgrep
   variables:
-    SEMGREP_RULES: "p/r2c"  # Использование рекомендованных правил безопасности
-    SEMGREP_SEVERITY: "ERROR,WARNING"  # Фильтр по критичности
+    SEMGREP_RULES: "auto"
   script:
-    # Сканируем только исходный код Java
-    - semgrep scan --config auto --sarif --output semgrep-report.sarif src/
+    - semgrep scan --config ${SEMGREP_RULES} --sarif --output semgrep-report.sarif .
   artifacts:
     reports:
       sast: semgrep-report.sarif
     expire_in: 1 week
-  allow_failure: true  # Позволяет пайплайну продолжиться даже если найдены уязвимости
+  allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 
