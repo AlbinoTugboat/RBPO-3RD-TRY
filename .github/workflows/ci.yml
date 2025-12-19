@@ -69,6 +69,7 @@ jobs:
       - name: Run OWASP Dependency-Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
+            -DautoUpdate=false\
             -DnvdApiKey=f9e6f963-0f6f-451f-be90-d3083f591571 \
             -Dformat=HTML \
             -DsuppressionFiles=dependency-check-suppressions.xml \
