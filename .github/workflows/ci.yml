@@ -184,7 +184,7 @@ jobs:
         continue-on-error: true
         uses: zaproxy/action-baseline@v0.9.0
         with:
-          target: "http://host.docker.internal:8080"
+          target: "http://127.0.0.1:8080"
           rules_file_name: ".zap/rules.tsv"
           cmd_options: "-I"
           allow_issue_writing: false
@@ -242,7 +242,7 @@ jobs:
         continue-on-error: true
         uses: zaproxy/action-api-scan@v0.10.0
         with:
-          target: ".zap/openapi-docker.yaml"
+          target: ".zap/openapi.yaml"
           format: "openapi"
           rules_file_name: ".zap/rules.tsv"
           cmd_options: "-I"
