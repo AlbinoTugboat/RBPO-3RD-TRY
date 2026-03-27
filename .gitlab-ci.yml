@@ -36,7 +36,7 @@ semgrep_sast:
   needs:
     - build
   script:
-    - semgrep scan --config p/default --gitlab-sast --output gl-sast-report.json --metrics=off .
+    - semgrep scan --config .semgrep/gitlab-rules.yml --gitlab-sast --output gl-sast-report.json --metrics=off .
   artifacts:
     when: always
     reports:

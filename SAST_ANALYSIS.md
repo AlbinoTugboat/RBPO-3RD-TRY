@@ -10,6 +10,9 @@
 semgrep scan --config p/default --metrics=off .
 ```
 
+Для GitLab CI используется локальный офлайн-профиль правил: `.semgrep/gitlab-rules.yml`  
+Это сделано, чтобы исключить падения пайплайна при недоступности `semgrep.dev`.
+
 ## Реальные уязвимости
 
 1. `src/main/java/ru/mtuci/coursemanagement/service/CourseService.java:42`  
