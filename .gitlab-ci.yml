@@ -4,14 +4,17 @@ workflow:
 
 stages:
   - build
+  - test
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  ODC_DATA_DIR: "$CI_PROJECT_DIR/.dependency-check-data"
 
 cache:
   paths:
     - .m2/repository/
     - target/
+    - .dependency-check-data/
 
 build:
   stage: build
@@ -27,4 +30,46 @@ build:
   artifacts:
     paths:
       - ./target/*.jar
+    expire_in: 1 week
+
+semgrep_sast:
+  stage: test
+  image: returntocorp/semgrep:latest
+  needs:
+    - build
+  script:
+    - semgrep scan --config .semgrep/gitlab-rules.yml --gitlab-sast --output gl-sast-report.json --metrics=off .
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+    paths:
+      - gl-sast-report.json
+    expire_in: 1 week
+
+dependency_check_sca:
+  stage: test
+  image: maven:3.9.9-eclipse-temurin-21
+  needs:
+    - build
+  cache:
+    key: dependency-check-db
+    paths:
+      - .m2/repository/
+      - .dependency-check-data/
+    policy: pull-push
+  script:
+    - chmod +x ./mvnw
+    - |
+      if [ -f "$ODC_DATA_DIR/odc.mv.db" ] || [ -f "$ODC_DATA_DIR/odc.script" ]; then
+        echo "Dependency-Check DB cache found, running fast scan without update."
+        ./mvnw -B -DskipTests -DautoUpdate=false dependency-check:check
+      else
+        echo "Dependency-Check DB cache not found, warming cache and running scan."
+        ./mvnw -B -DskipTests dependency-check:update-only dependency-check:check
+      fi
+  artifacts:
+    when: always
+    paths:
+      - target/dependency-check-report.html
     expire_in: 1 week

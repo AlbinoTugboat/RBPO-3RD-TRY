@@ -17,6 +17,8 @@
 
     <properties>
         <java.version>21</java.version>
+        <dependency-check.version>12.2.0</dependency-check.version>
+        <dependency-check.data.dir>${project.basedir}/.dependency-check-data</dependency-check.data.dir>
     </properties>
 
     <dependencies>
@@ -92,6 +94,20 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>${dependency-check.version}</version>
+                <configuration>
+                    <format>HTML</format>
+                    <dataDirectory>${dependency-check.data.dir}</dataDirectory>
+                    <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+                    <suppressionFiles>
+                        <suppressionFile>${project.basedir}/dependency-check-suppressions.xml</suppressionFile>
+                    </suppressionFiles>
+                    <failBuildOnCVSS>11</failBuildOnCVSS>
                 </configuration>
             </plugin>
         </plugins>
