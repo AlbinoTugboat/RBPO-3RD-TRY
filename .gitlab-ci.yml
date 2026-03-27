@@ -73,3 +73,45 @@ dependency_check_sca:
     paths:
       - target/dependency-check-report.html
     expire_in: 1 week
+
+dast_baseline:
+  stage: test
+  image:
+    name: zaproxy/zap-stable
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - java -jar target/*.jar > app-baseline.log 2>&1 &
+    - sleep 30
+    - zap-baseline.py -t http://127.0.0.1:8080 -c .zap/rules.tsv -r zap-baseline-report.html -J zap-baseline-report.json -w zap-baseline-report.md -I || true
+  artifacts:
+    when: always
+    paths:
+      - zap-baseline-report.html
+      - zap-baseline-report.json
+      - zap-baseline-report.md
+      - app-baseline.log
+    expire_in: 1 week
+
+dast_api:
+  stage: test
+  image:
+    name: zaproxy/zap-stable
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - java -jar target/*.jar > app-api.log 2>&1 &
+    - sleep 30
+    - zap-api-scan.py -f openapi -t .zap/openapi.yaml -c .zap/rules.tsv -r zap-api-report.html -J zap-api-report.json -w zap-api-report.md -I || true
+  artifacts:
+    when: always
+    paths:
+      - zap-api-report.html
+      - zap-api-report.json
+      - zap-api-report.md
+      - app-api.log
+    expire_in: 1 week

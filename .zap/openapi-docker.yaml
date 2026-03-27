@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Course Management API
+  version: 1.0.0
+servers:
+  - url: http://host.docker.internal:8080
+paths:
+  /api/courses:
+    get:
+      summary: Get all courses
+      responses:
+        "200":
+          description: OK
+  /api/courses/{id}:
+    get:
+      summary: Get one course
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+  /api/students:
+    get:
+      summary: Get all students
+      responses:
+        "200":
+          description: OK
+  /api/students/{id}:
+    get:
+      summary: Get one student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+  /api/xml/parse:
+    post:
+      summary: Parse XML payload
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: OK
