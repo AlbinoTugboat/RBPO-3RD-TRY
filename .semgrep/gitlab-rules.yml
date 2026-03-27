@@ -1,0 +1,59 @@
+rules:
+  - id: rbpo.java.sql-injection.string-concat
+    message: SQL query is built with string concatenation and may allow SQL Injection.
+    severity: ERROR
+    languages:
+      - java
+    metadata:
+      category: security
+      cwe:
+        - "CWE-89: SQL Injection"
+      owasp:
+        - "A03:2021 - Injection"
+      confidence: MEDIUM
+      likelihood: MEDIUM
+      impact: HIGH
+    patterns:
+      - pattern: |
+          String $SQL = "..." + $INPUT + "...";
+
+  - id: rbpo.java.cors.wildcard
+    message: CORS wildcard allows requests from any origin.
+    severity: WARNING
+    languages:
+      - java
+    metadata:
+      category: security
+      cwe:
+        - "CWE-942: Permissive Cross-domain Policy with Untrusted Domains"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: MEDIUM
+    pattern: "@CrossOrigin(origins = \"*\")"
+
+  - id: rbpo.yaml.actuator.exposure-all
+    message: Spring Actuator endpoints are fully exposed.
+    severity: ERROR
+    languages:
+      - yaml
+    metadata:
+      category: security
+      cwe:
+        - "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+    pattern: |
+      management:
+        ...
+        endpoints:
+          ...
+          web:
+            ...
+            exposure:
+              ...
+              include: "*"
