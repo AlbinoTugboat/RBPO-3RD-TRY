@@ -7,10 +7,13 @@
 <body>
 <h2>Course Management</h2>
 <p>
-    <a href="/login">Войти</a> |
-    <a href="/students">Студенты</a> |
-    <a href="/courses">Курсы</a>
+    <a href="/students">Students</a> |
+    <a href="/courses">Courses</a>
 </p>
-<p>Демо-пользователи: <b>teacher/password</b>, <b>student/password</b></p>
+<form method="post" action="/logout">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <button type="submit">Logout</button>
+</form>
+<p>Demo accounts: <b>teacher/password</b>, <b>student/password</b></p>
 </body>
 </html>

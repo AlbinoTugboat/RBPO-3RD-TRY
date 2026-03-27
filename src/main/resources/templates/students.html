@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="UTF-8"/><title>Студенты</title></head>
+<head><meta charset="UTF-8"/><title>Students</title></head>
 <body>
-<h3>Студенты</h3>
+<h3>Students</h3>
 <table border="1">
-    <tr><th>ID</th><th>Имя</th><th>Email</th><th>UserId</th></tr>
+    <tr><th>ID</th><th>Name</th><th>Email</th><th>UserId</th></tr>
     <tr th:each="s: ${students}">
         <td th:text="${s.id}"></td>
         <td th:text="${s.name}"></td>
@@ -13,13 +13,18 @@
     </tr>
 </table>
 <hr/>
-<h4>Добавить студента</h4>
+<h4>Add student (TEACHER only)</h4>
 <form method="post" action="/students">
-    <input name="name" placeholder="Имя"/>
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <input name="name" placeholder="Name"/>
     <input name="email" placeholder="Email"/>
-    <input name="userId" placeholder="userId"/>
-    <button type="submit">Сохранить</button>
+    <input name="userId" placeholder="UserId"/>
+    <button type="submit">Save</button>
 </form>
-<p><a href="/">На главную</a></p>
+<p><a href="/">Home</a></p>
+<form method="post" action="/logout">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <button type="submit">Logout</button>
+</form>
 </body>
 </html>

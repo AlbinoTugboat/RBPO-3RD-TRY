@@ -1,11 +1,10 @@
 package ru.mtuci.coursemanagement.controller;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,16 +13,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.client.RestTemplate;
 import ru.mtuci.coursemanagement.model.Course;
 import ru.mtuci.coursemanagement.repository.CourseRepository;
 import ru.mtuci.coursemanagement.service.CourseService;
 
 import java.util.List;
 
-@Slf4j
 @Controller
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class CourseController {
     private final CourseRepository repo;
@@ -37,6 +33,7 @@ public class CourseController {
     }
 
     @PostMapping("/courses")
+    @PreAuthorize("hasRole('TEACHER')")
     public String createCourse(@ModelAttribute Course c) {
         repo.save(c);
         return "redirect:/courses";
@@ -57,6 +54,7 @@ public class CourseController {
     }
 
     @PutMapping("/api/courses/{id}")
+    @PreAuthorize("hasRole('TEACHER')")
     @ResponseBody
     public ResponseEntity<Course> update(@PathVariable Long id, @RequestBody Course payload) {
         return repo.findById(id).map(c -> {
@@ -71,14 +69,5 @@ public class CourseController {
     @ResponseBody
     public List<Course> search(@RequestParam String title) {
         return service.searchByTitle(title);
-    }
-
-    @GetMapping("/api/courses/import")
-    @ResponseBody
-    public String importFromUrl(@RequestParam String url) {
-        RestTemplate rt = new RestTemplate();
-        String json = rt.getForObject(url, String.class);
-        log.info("Импортированы данные курсов (raw): {}", json);
-        return "OK";
     }
 }

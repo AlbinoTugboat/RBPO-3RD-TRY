@@ -184,13 +184,19 @@ jobs:
 
       - name: Run ZAP baseline scan
         continue-on-error: true
-        uses: zaproxy/action-baseline@v0.15.0
-        with:
-          target: "http://127.0.0.1:8080"
-          rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-I"
-          allow_issue_writing: false
-          artifact_name: "zap-scan-baseline"
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/zap/wrk/:rw" \
+            --network=host \
+            -w /zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://127.0.0.1:8080 \
+            -c .zap/rules.tsv \
+            -r zap-baseline-report.html \
+            -J zap-baseline-report.json \
+            -w zap-baseline-report.md \
+            -I || true
 
       - name: Normalize baseline report filenames
         if: always()
@@ -245,14 +251,20 @@ jobs:
 
       - name: Run ZAP API scan
         continue-on-error: true
-        uses: zaproxy/action-api-scan@v0.10.0
-        with:
-          target: ".zap/openapi.yaml"
-          format: "openapi"
-          rules_file_name: ".zap/rules.tsv"
-          cmd_options: "-I"
-          allow_issue_writing: false
-          artifact_name: "zap-scan-api"
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/zap/wrk/:rw" \
+            --network=host \
+            -w /zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py \
+            -f openapi \
+            -t .zap/openapi.yaml \
+            -c .zap/rules.tsv \
+            -r zap-api-report.html \
+            -J zap-api-report.json \
+            -w zap-api-report.md \
+            -I || true
 
       - name: Normalize API report filenames
         if: always()

@@ -1,98 +1,251 @@
-# Отчет по анализу безопасности (SAST + SCA + DAST)
+# Отчёт по практическому заданию №6
 
-Дата обновления: 27.03.2026  
-Проект: `course-management`
+Дата: 27.03.2026  
+Проект: `course-management`  
+Ветка: `practice-6`
 
-## 1) SAST (Semgrep CE)
+## 1. Что нужно было сделать
 
-Команда запуска:
+1. Найти уязвимости в проекте.
+2. Обновить отчёт из ПЗ-5.
+3. Предложить исправления.
+4. Исправить реальные уязвимости.
+5. Подготовить изменения для PR/MR.
 
-```bash
-semgrep scan --config p/default --metrics=off .
+## 2. Реальные уязвимости
+
+1. SQL-инъекция в поиске курсов.
+2. Небезопасный разбор XML (XXE-риск).
+3. SSRF: запросы по произвольному URL.
+4. Загрузка и запуск кода из внешнего URL.
+5. Небезопасная аутентификация:
+   - пароль в открытом виде;
+   - логирование пароля;
+   - возможность выбрать роль при регистрации.
+6. Слабые настройки безопасности:
+   - CORS `*`;
+   - открытые management endpoint’ы;
+   - вывод stacktrace в ответах.
+7. Слабый container hardening:
+   - запуск от root;
+   - docker socket в `docker-compose`.
+
+## 3. Ложные срабатывания
+
+1. Часть Semgrep-правил для Django CSRF (проект на Spring, не Django).
+2. Часть DAST-предупреждений по кэшированию/редиректам (шум hardening-уровня).
+
+## 4. Что исправили
+
+1. Сделали безопасный SQL-запрос в поиске.
+2. Переписали XML-парсер на безопасный.
+3. Удалили SSRF-endpoint’ы.
+4. Удалили динамическую загрузку внешнего кода.
+5. Подключили Spring Security.
+6. Пароли перевели на BCrypt.
+7. Запретили выбор роли при регистрации.
+8. Добавили CSRF-токены в HTML-формы.
+9. Ужесточили `application.yaml`.
+10. Ужесточили `Dockerfile` и `docker-compose.yml`.
+11. Исправили DAST в GitHub Actions (прямой запуск ZAP через Docker).
+
+## 5. Код из мест, где были уязвимости
+
+### 5.1 SQL-инъекция (было / стало)
+
+Было:
+```java
+public List<Course> searchByTitle(String title) {
+    String sql = "SELECT id, title, description, teacher_id FROM courses WHERE title = '" + title + "'";
+    return jdbc.query(sql, rm);
+}
 ```
 
-Для GitLab используется локальный профиль `.semgrep/gitlab-rules.yml` (офлайн-режим).
-
-### Реальные уязвимости (SAST)
-
-1. `src/main/java/ru/mtuci/coursemanagement/service/CourseService.java:33`  
-   SQL Injection: SQL-запрос собирается конкатенацией пользовательского `title`.
-2. `Dockerfile:5`  
-   Контейнер запускается от `root`.
-3. `docker-compose.yml:7-9`  
-   Проброс Docker socket (`/var/run/docker.sock`) в контейнер.
-4. `docker-compose.yml:3`  
-   Нет ограничений `read_only` и `no-new-privileges`.
-
-### Ложные срабатывания (SAST)
-
-1. `python.django.security.django-no-csrf-token.django-no-csrf-token` на HTML-шаблонах проекта.  
-   Причина: проект использует Spring Boot + Thymeleaf, а не Django.
-
-## 2) SCA (OWASP Dependency-Check)
-
-Команда запуска:
-
-```bash
-./mvnw -B -DskipTests dependency-check:check
+Стало:
+```java
+public List<Course> searchByTitle(String title) {
+    String sql = "SELECT id, title, description, teacher_id FROM courses WHERE title = ?";
+    return jdbc.query(sql, rm, title);
+}
 ```
 
-Отчет: `target/dependency-check-report.html`.
+### 5.2 Небезопасный XML (XXE) (было / стало)
 
-### Найденные уязвимости до исключений
-
-1. `dom4j:dom4j:1.6.1` -> `CVE-2020-10683`
-2. `org.apache.tomcat.embed:tomcat-embed-core:10.1.43` -> `CVE-2025-48989`, `CVE-2025-55752`, `CVE-2025-55754`, `CVE-2025-61795`, `CVE-2025-66614`, `CVE-2026-24733`, `CVE-2026-24734`
-3. `org.apache.logging.log4j:log4j-api:2.24.3` -> `CVE-2025-68161`
-
-### Реальные уязвимости (SCA)
-
-1. `CVE-2020-10683` (`dom4j:1.6.1`)  
-   Устаревшая библиотека + риск XXE при небезопасной конфигурации XML-парсинга.
-2. CVE в `tomcat-embed-core:10.1.43`  
-   Версия попадает в уязвимые диапазоны из отчета.
-
-### Ложные срабатывания (SCA)
-
-1. `CVE-2025-68161` на `log4j-api`  
-   Неприменимо к проекту: CVE относится к `log4j-core` (Socket Appender), которого нет в используемом стеке.
-
-Подавление добавлено в `dependency-check-suppressions.xml`.
-
-## 3) DAST (OWASP ZAP)
-
-Локальные команды для валидации:
-
-```bash
-docker run --rm -v "${PWD}:/zap/wrk/:rw" -w /zap/wrk zaproxy/zap-stable zap-baseline.py -t http://host.docker.internal:8080 -c .zap/rules.tsv -r target/zap-baseline-report.html -J target/zap-baseline-report.json -w target/zap-baseline-report.md -I
-docker run --rm -v "${PWD}:/zap/wrk/:rw" -w /zap/wrk zaproxy/zap-stable zap-api-scan.py -f openapi -t .zap/openapi-docker.yaml -c .zap/rules.tsv -r target/zap-api-report.html -J target/zap-api-report.json -w target/zap-api-report.md -I
+Было:
+```java
+SAXReader reader = new SAXReader();
+Document doc = reader.read(new StringReader(xml));
+return doc.getRootElement().getText();
 ```
 
-### Реальные уязвимости/риски (DAST)
+Стало:
+```java
+DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+```
 
-1. Отсутствуют базовые security headers на веб-страницах/части API:  
-   `Missing Anti-clickjacking Header`, `X-Content-Type-Options Header Missing`, `CSP Header Not Set`, `Permissions-Policy Header Not Set`.
-2. Отсутствует `SameSite` у session cookie (`Cookie without SameSite Attribute`).
-3. Отсутствуют anti-CSRF токены в формах (`Absence of Anti-CSRF Tokens`).
-4. Возможна фиксация/утечка session id через URL (`Session ID in URL Rewrite`).
-5. Есть раскрытие деталей ошибок на `POST /register` (`Application Error Disclosure` / `Information Disclosure - Debug Error Messages`).
+### 5.3 SSRF: proxy endpoint (было)
 
-### Ложные срабатывания/шум (DAST)
+Было:
+```java
+@GetMapping("/api/proxy")
+public String proxy(@RequestParam("targetUrl") String targetUrl) {
+    RestTemplate rt = new RestTemplate();
+    return rt.getForObject(targetUrl, String.class);
+}
+```
 
-1. `Unexpected Content-Type was returned` в API-скане по корневым URL.  
-   Причина: для UI-эндпоинтов возвращается HTML, это ожидаемо и не является уязвимостью.
-2. Часть disclosure-срабатываний на `POST /register` спровоцирована тестовым запросом без обязательных параметров и относится к hardening-шуму, а не к прямому эксплуатационному сценарию.
+Исправление: `ProxyController` удалён.
 
-## 4) Варианты устранения
+### 5.4 SSRF: импорт по URL (было)
 
-1. Подключить Spring Security и задать защитные заголовки (`X-Frame-Options`, `X-Content-Type-Options`, CSP, Permissions-Policy).
-2. Включить CSRF-защиту для state-changing форм (`POST/PUT/DELETE`) и добавить CSRF token в Thymeleaf-формы.
-3. Настроить cookie-политику: `HttpOnly`, `Secure`, `SameSite=Lax/Strict`.
-4. Запретить URL rewriting для сессий и использовать только cookie-механизм сессии.
-5. Скрыть диагностические детали в error-ответах, добавить единый `@ControllerAdvice`/кастомный error handler без утечки внутренних сообщений.
-6. Для SCA: обновить `dom4j` и `tomcat-embed-core` до исправленных версий, поддерживать suppressions только для подтвержденных false positive.
+Было:
+```java
+@GetMapping("/api/courses/import")
+@ResponseBody
+public String importFromUrl(@RequestParam String url) {
+    RestTemplate rt = new RestTemplate();
+    String json = rt.getForObject(url, String.class);
+    log.info("Импортированы данные курсов (raw): {}", json);
+    return "OK";
+}
+```
 
-## 5) Изменения CI для ПЗ-5
+Исправление: endpoint удалён из `CourseController`.
 
-1. GitLab CI: добавлены job `dast_baseline` и `dast_api` на этапе `test` с `zaproxy/zap-stable`, запуском jar в фоне, ожиданием старта и выгрузкой ZAP-отчетов в artifacts.
-2. GitHub Actions: добавлены job `dast_baseline` и `dast_api` с `actions/download-artifact@v4`, запуском jar в фоне, `zaproxy/action-baseline@v0.9.0`, `zaproxy/action-api-scan@v0.10.0` и выгрузкой отчетов через `actions/upload-artifact@v4`.
+### 5.5 Загрузка внешнего кода (было)
+
+Было:
+```java
+URL url = new URL(pluginUrl);
+try (URLClassLoader cl = new URLClassLoader(new URL[]{url}, this.getClass().getClassLoader())) {
+    Class<?> clazz = Class.forName("com.example.PluginMain", true, cl);
+    Method m = clazz.getDeclaredMethod("init");
+    m.invoke(null);
+}
+```
+
+Исправление: `PluginLoader` удалён.
+
+### 5.6 Небезопасный логин и регистрация (было / стало)
+
+Было:
+```java
+if (u.getPassword().equals(password)) {
+    log.info("User {} logged in with password {}", username, password);
+}
+
+users.save(new User(null, username, password, role));
+```
+
+Стало:
+```java
+users.register(username, password); // пароль хэшируется, роль фиксированная STUDENT
+```
+
+И в сервисе:
+```java
+public User register(String username, String rawPassword) {
+    User user = new User(null, username, passwordEncoder.encode(rawPassword), "STUDENT");
+    return repo.save(user);
+}
+```
+
+### 5.7 Открытый CORS (было)
+
+Было:
+```java
+registry.addMapping("/**")
+        .allowedMethods("*")
+        .allowedOrigins("*")
+        .allowedHeaders("*");
+```
+
+Исправление: `WebConfig` удалён, контроль доступа выполняется через Spring Security.
+
+### 5.8 Слабый `application.yaml` (было / стало)
+
+Было:
+```yaml
+h2:
+  console:
+    enabled: true
+    settings:
+      web-allow-others: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+server:
+  error:
+    include-stacktrace: ALWAYS
+```
+
+Стало:
+```yaml
+h2:
+  console:
+    enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,info"
+server:
+  error:
+    include-stacktrace: never
+```
+
+### 5.9 Docker hardening (было / стало)
+
+Было (`Dockerfile`):
+```dockerfile
+FROM eclipse-temurin:21-jdk
+ENTRYPOINT ["java","-jar","/app/app.jar"]
+```
+
+Стало (`Dockerfile`):
+```dockerfile
+FROM eclipse-temurin:21-jre
+RUN addgroup --system app && adduser --system --ingroup app app
+USER app
+ENTRYPOINT ["java","-jar","/app/app.jar"]
+```
+
+Было (`docker-compose.yml`):
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock
+  - ./gitlab-runner-config:/etc/gitlab-runner
+```
+
+Стало (`docker-compose.yml`):
+```yaml
+read_only: true
+security_opt:
+  - no-new-privileges:true
+tmpfs:
+  - /tmp
+volumes:
+  - ./gitlab-runner-config:/etc/gitlab-runner
+```
+
+## 6. Проверка
+
+Локально выполнено:
+```bash
+./mvnw -B test
+```
+
+Результат: тесты проходят.
+
+## 7. Итог
+
+1. Реальные уязвимости найдены и исправлены.
+2. Ложные срабатывания отделены от реальных проблем.
+3. В отчёт добавлены конкретные фрагменты кода из уязвимых мест.
+4. Проект готов к PR/MR по ПЗ-6.
