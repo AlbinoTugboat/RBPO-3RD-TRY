@@ -1,21 +1,26 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head><meta charset="UTF-8"/><title>Вход</title></head>
+<head><meta charset="UTF-8"/><title>Login</title></head>
 <body>
-<h3>Вход</h3>
+<h3>Login</h3>
 <form method="post" action="/login">
-    <label>Логин: <input type="text" name="username"/></label><br/>
-    <label>Пароль: <input type="password" name="password"/></label><br/>
-    <button type="submit">Войти</button>
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <label>Username: <input type="text" name="username" required/></label><br/>
+    <label>Password: <input type="password" name="password" required/></label><br/>
+    <button type="submit">Sign in</button>
 </form>
-<p th:if="${error}" th:text="${error}"></p>
+<p th:if="${param.error}" style="color: red;">Invalid username or password</p>
+<p th:if="${param.logout}" style="color: green;">You have been logged out</p>
+<p th:if="${param.registered}" style="color: green;">Registration successful</p>
+<p th:if="${error}" th:text="${error}" style="color: red;"></p>
+
 <hr/>
-<h4>Регистрация (демо A04: можно указать роль)</h4>
+<h4>Registration (new users get STUDENT role)</h4>
 <form method="post" action="/register">
-    <input name="username" placeholder="username"/>
-    <input name="password" placeholder="password"/>
-    <input name="role" placeholder="role (STUDENT/TEACHER)"/>
-    <button type="submit">Зарегистрироваться</button>
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <input name="username" placeholder="username" required/>
+    <input name="password" placeholder="password" type="password" minlength="8" required/>
+    <button type="submit">Register</button>
 </form>
 </body>
 </html>

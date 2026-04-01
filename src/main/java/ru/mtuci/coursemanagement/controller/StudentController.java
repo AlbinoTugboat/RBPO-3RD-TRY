@@ -1,11 +1,10 @@
 package ru.mtuci.coursemanagement.controller;
 
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -20,7 +19,6 @@ import ru.mtuci.coursemanagement.repository.StudentRepository;
 import java.util.List;
 
 @Controller
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class StudentController {
     private final StudentRepository repo;
@@ -33,6 +31,7 @@ public class StudentController {
     }
 
     @PostMapping("/students")
+    @PreAuthorize("hasRole('TEACHER')")
     public String createStudent(@ModelAttribute Student st) {
         repo.save(st);
         return "redirect:/students";
@@ -46,11 +45,12 @@ public class StudentController {
 
     @GetMapping("/api/students/{id}")
     @ResponseBody
-    public ResponseEntity<Student> one(@PathVariable Long id, HttpSession s) {
+    public ResponseEntity<Student> one(@PathVariable Long id) {
         return repo.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/api/students/{id}")
+    @PreAuthorize("hasRole('TEACHER')")
     @ResponseBody
     public ResponseEntity<Student> update(@PathVariable Long id, @RequestBody Student payload) {
         return repo.findById(id).map(st -> {
@@ -62,6 +62,7 @@ public class StudentController {
     }
 
     @DeleteMapping("/api/students/{id}")
+    @PreAuthorize("hasRole('TEACHER')")
     @ResponseBody
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         repo.deleteById(id);

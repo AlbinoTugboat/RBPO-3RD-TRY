@@ -1,17 +1,36 @@
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'main'
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == 'main'
 
 stages:
+  - secret_scan
   - build
+  - test
+  - docker_build
+  - docker_scan
+  - docker_publish
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  ODC_DATA_DIR: "$CI_PROJECT_DIR/.dependency-check-data"
 
 cache:
   paths:
     - .m2/repository/
     - target/
+    - .dependency-check-data/
+
+secret_detection:
+  stage: secret_scan
+  image: zricethezav/gitleaks:v8.24.2
+  script:
+    - gitleaks dir . --redact --report-format json --report-path gl-secret-detection-report.json --exit-code 1
+  artifacts:
+    when: always
+    paths:
+      - gl-secret-detection-report.json
+    expire_in: 1 week
 
 build:
   stage: build
@@ -28,3 +47,193 @@ build:
     paths:
       - ./target/*.jar
     expire_in: 1 week
+
+semgrep_sast:
+  stage: test
+  image: returntocorp/semgrep:latest
+  needs:
+    - build
+  script:
+    - semgrep scan --config .semgrep/gitlab-rules.yml --gitlab-sast --output gl-sast-report.json --metrics=off .
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+    paths:
+      - gl-sast-report.json
+    expire_in: 1 week
+
+dependency_check_sca:
+  stage: test
+  image: maven:3.9.9-eclipse-temurin-21
+  needs:
+    - build
+  cache:
+    key: dependency-check-db
+    paths:
+      - .m2/repository/
+      - .dependency-check-data/
+    policy: pull-push
+  script:
+    - chmod +x ./mvnw
+    - |
+      if [ -f "$ODC_DATA_DIR/odc.mv.db" ] || [ -f "$ODC_DATA_DIR/odc.script" ]; then
+        echo "Dependency-Check DB cache found, running fast scan without update."
+        ./mvnw -B -DskipTests -DautoUpdate=false dependency-check:check
+      else
+        echo "Dependency-Check DB cache not found, warming cache and running scan."
+        ./mvnw -B -DskipTests dependency-check:update-only dependency-check:check
+      fi
+  artifacts:
+    when: always
+    paths:
+      - target/dependency-check-report.html
+    expire_in: 1 week
+
+dast_baseline:
+  stage: test
+  image:
+    name: zaproxy/zap-stable
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - java -jar target/*.jar > app-baseline.log 2>&1 &
+    - sleep 30
+    - zap-baseline.py -t http://127.0.0.1:8080 -c .zap/rules.tsv -r zap-baseline-report.html -J zap-baseline-report.json -w zap-baseline-report.md -I || true
+  artifacts:
+    when: always
+    paths:
+      - zap-baseline-report.html
+      - zap-baseline-report.json
+      - zap-baseline-report.md
+      - app-baseline.log
+    expire_in: 1 week
+
+dast_api:
+  stage: test
+  image:
+    name: zaproxy/zap-stable
+    entrypoint: [""]
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - java -jar target/*.jar > app-api.log 2>&1 &
+    - sleep 30
+    - zap-api-scan.py -f openapi -t .zap/openapi.yaml -c .zap/rules.tsv -r zap-api-report.html -J zap-api-report.json -w zap-api-report.md -I || true
+  artifacts:
+    when: always
+    paths:
+      - zap-api-report.html
+      - zap-api-report.json
+      - zap-api-report.md
+      - app-api.log
+    expire_in: 1 week
+
+web_fuzzing:
+  stage: test
+  image: eclipse-temurin:21-jdk
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends curl ca-certificates tar
+    - curl -sSL -o ffuf.tar.gz https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_linux_amd64.tar.gz
+    - tar -xzf ffuf.tar.gz ffuf
+    - chmod +x ffuf
+    - mkdir -p .fuzz
+    - |
+      cat > .fuzz/paths.txt <<'EOF'
+      admin
+      api
+      debug
+      internal
+      login
+      test
+      EOF
+    - |
+      cat > .fuzz/payloads.txt <<'EOF'
+      '
+      "
+      <script>alert(1)</script>
+      ../../../../etc/passwd
+      %27%20OR%201%3D1--
+      ${jndi:ldap://127.0.0.1/a}
+      EOF
+    - |
+      set -e
+      java -jar target/*.jar > app-fuzz.log 2>&1 &
+      APP_PID=$!
+      trap "kill $APP_PID" EXIT
+      sleep 30
+      ./ffuf -w .fuzz/paths.txt -u "http://127.0.0.1:8080/FUZZ" -mc all -fc 404 -of json -o ffuf-path.json || true
+      ./ffuf -w .fuzz/payloads.txt -u "http://127.0.0.1:8080/?q=FUZZ" -mc all -fc 404 -of json -o ffuf-query.json || true
+      if grep -E '"status"[[:space:]]*:[[:space:]]*5[0-9]{2}' ffuf-path.json ffuf-query.json > /dev/null; then
+        echo "Web fuzzing detected HTTP 5xx responses."
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - ffuf-path.json
+      - ffuf-query.json
+      - app-fuzz.log
+    expire_in: 1 week
+
+docker_image_build:
+  stage: docker_build
+  image: docker:27.5.1
+  services:
+    - name: docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
+    - docker save "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -o docker-image.tar
+  artifacts:
+    paths:
+      - docker-image.tar
+    expire_in: 1 day
+
+docker_image_scan:
+  stage: docker_scan
+  image: aquasec/trivy:0.57.1
+  needs:
+    - job: docker_image_build
+      artifacts: true
+  script:
+    - trivy config --skip-check-update --severity HIGH,CRITICAL --exit-code 1 --format table --output trivy-dockerfile-report.txt Dockerfile
+    - trivy image --input docker-image.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output trivy-image-report.txt
+  artifacts:
+    when: always
+    paths:
+      - trivy-dockerfile-report.txt
+      - trivy-image-report.txt
+    expire_in: 1 week
+
+docker_image_publish:
+  stage: docker_publish
+  image: docker:27.5.1
+  services:
+    - name: docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  needs:
+    - job: docker_image_build
+      artifacts: true
+    - job: docker_image_scan
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == 'main'
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker load -i docker-image.tar
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+    - docker tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE:latest"
+    - docker push "$CI_REGISTRY_IMAGE:latest"
