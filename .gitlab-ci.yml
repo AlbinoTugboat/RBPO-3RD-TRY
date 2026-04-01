@@ -3,6 +3,7 @@ workflow:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'main'
 
 stages:
+  - secret_scan
   - build
   - test
 
@@ -15,6 +16,17 @@ cache:
     - .m2/repository/
     - target/
     - .dependency-check-data/
+
+secret_detection:
+  stage: secret_scan
+  image: zricethezav/gitleaks:v8.24.2
+  script:
+    - gitleaks dir --source . --no-git --redact --report-format json --report-path gl-secret-detection-report.json --exit-code 1
+  artifacts:
+    when: always
+    paths:
+      - gl-secret-detection-report.json
+    expire_in: 1 week
 
 build:
   stage: build
