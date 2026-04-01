@@ -127,3 +127,52 @@ dast_api:
       - zap-api-report.md
       - app-api.log
     expire_in: 1 week
+
+web_fuzzing:
+  stage: test
+  image: eclipse-temurin:21-jdk
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends python3 python3-pip
+    - python3 -m pip install --upgrade pip
+    - python3 -m pip install wfuzz
+    - mkdir -p .fuzz
+    - |
+      cat > .fuzz/paths.txt <<'EOF'
+      admin
+      api
+      debug
+      internal
+      login
+      test
+      EOF
+    - |
+      cat > .fuzz/payloads.txt <<'EOF'
+      '
+      "
+      <script>alert(1)</script>
+      ../../../../etc/passwd
+      %27%20OR%201%3D1--
+      ${jndi:ldap://127.0.0.1/a}
+      EOF
+    - |
+      set -e
+      java -jar target/*.jar > app-fuzz.log 2>&1 &
+      APP_PID=$!
+      trap "kill $APP_PID" EXIT
+      sleep 30
+      wfuzz -f wfuzz-path.txt,raw -w .fuzz/paths.txt --hc 404 "http://127.0.0.1:8080/FUZZ" || true
+      wfuzz -f wfuzz-query.txt,raw -w .fuzz/payloads.txt --hc 404 "http://127.0.0.1:8080/?q=FUZZ" || true
+      if grep -E "C=5[0-9]{2}|[[:space:]]5[0-9]{2}[[:space:]]" wfuzz-path.txt wfuzz-query.txt > /dev/null; then
+        echo "Web fuzzing detected HTTP 5xx responses."
+        exit 1
+      fi
+  artifacts:
+    when: always
+    paths:
+      - wfuzz-path.txt
+      - wfuzz-query.txt
+      - app-fuzz.log
+    expire_in: 1 week
