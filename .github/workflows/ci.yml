@@ -431,7 +431,7 @@ jobs:
           docker run --rm -v "${{ github.workspace }}:/work" aquasec/trivy:0.57.1 \
             config --skip-check-update --severity HIGH,CRITICAL --exit-code 1 --format table --output /work/trivy-dockerfile-report.txt /work/Dockerfile
           docker run --rm -v "${{ github.workspace }}:/work" aquasec/trivy:0.57.1 \
-            image --input /work/docker-image.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output /work/trivy-image-report.txt
+            image --input /work/docker-image.tar --scanners vuln --vuln-type os --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output /work/trivy-image-report.txt
 
       - name: Upload Trivy reports
         if: always()

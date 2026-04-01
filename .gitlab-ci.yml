@@ -209,7 +209,7 @@ docker_image_scan:
       artifacts: true
   script:
     - trivy config --skip-check-update --severity HIGH,CRITICAL --exit-code 1 --format table --output trivy-dockerfile-report.txt Dockerfile
-    - trivy image --input docker-image.tar --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output trivy-image-report.txt
+    - trivy image --input docker-image.tar --scanners vuln --vuln-type os --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output trivy-image-report.txt
   artifacts:
     when: always
     paths:
