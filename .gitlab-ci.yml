@@ -21,7 +21,7 @@ secret_detection:
   stage: secret_scan
   image: zricethezav/gitleaks:v8.24.2
   script:
-    - gitleaks dir --source . --no-git --redact --report-format json --report-path gl-secret-detection-report.json --exit-code 1
+    - gitleaks dir . --redact --report-format json --report-path gl-secret-detection-report.json --exit-code 1
   artifacts:
     when: always
     paths:
