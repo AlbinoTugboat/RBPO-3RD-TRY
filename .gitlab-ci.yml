@@ -1,11 +1,15 @@
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event' && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'main'
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == 'main'
 
 stages:
   - secret_scan
   - build
   - test
+  - docker_build
+  - docker_scan
+  - docker_publish
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
@@ -177,3 +181,59 @@ web_fuzzing:
       - ffuf-query.json
       - app-fuzz.log
     expire_in: 1 week
+
+docker_image_build:
+  stage: docker_build
+  image: docker:27.5.1
+  services:
+    - name: docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" .
+    - docker save "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" -o docker-image.tar
+  artifacts:
+    paths:
+      - docker-image.tar
+    expire_in: 1 day
+
+docker_image_scan:
+  stage: docker_scan
+  image: aquasec/trivy:0.57.1
+  needs:
+    - job: docker_image_build
+      artifacts: true
+  script:
+    - trivy config --severity HIGH,CRITICAL --exit-code 1 --format table --output trivy-dockerfile-report.txt Dockerfile
+    - trivy image --input docker-image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output trivy-image-report.txt
+  artifacts:
+    when: always
+    paths:
+      - trivy-dockerfile-report.txt
+      - trivy-image-report.txt
+    expire_in: 1 week
+
+docker_image_publish:
+  stage: docker_publish
+  image: docker:27.5.1
+  services:
+    - name: docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  needs:
+    - job: docker_image_build
+      artifacts: true
+    - job: docker_image_scan
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_BRANCH == 'main'
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - docker load -i docker-image.tar
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+    - docker tag "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA" "$CI_REGISTRY_IMAGE:latest"
+    - docker push "$CI_REGISTRY_IMAGE:latest"

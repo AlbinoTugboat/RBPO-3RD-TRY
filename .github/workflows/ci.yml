@@ -3,10 +3,13 @@ name: CI Pipeline
 on:
   pull_request:
     branches: [ main ]
+  push:
+    branches: [ main ]
 
 permissions:
   contents: read
   security-events: write
+  packages: write
 
 jobs:
   secret_scan:
@@ -380,3 +383,89 @@ jobs:
             ffuf-query.json
             app-fuzz.log
           retention-days: 7
+
+  docker_image_build:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: target-jars
+          path: target
+
+      - name: Build Docker image
+        run: |
+          docker build -t rbpo-app:${{ github.sha }} .
+          docker save rbpo-app:${{ github.sha }} -o docker-image.tar
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-tar
+          path: docker-image.tar
+          retention-days: 1
+
+  docker_image_scan:
+    runs-on: ubuntu-latest
+    needs: docker_image_build
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-tar
+          path: .
+
+      - name: Scan Dockerfile and Docker image with Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -v "${{ github.workspace }}:/work" aquasec/trivy:0.57.1 \
+            config --severity HIGH,CRITICAL --exit-code 1 --format table --output /work/trivy-dockerfile-report.txt /work/Dockerfile
+          docker run --rm -v "${{ github.workspace }}:/work" aquasec/trivy:0.57.1 \
+            image --input /work/docker-image.tar --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table --output /work/trivy-image-report.txt
+
+      - name: Upload Trivy reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-docker-reports
+          path: |
+            trivy-dockerfile-report.txt
+            trivy-image-report.txt
+          retention-days: 7
+
+  docker_image_publish:
+    runs-on: ubuntu-latest
+    needs: docker_image_scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-tar
+          path: .
+
+      - name: Load image and push to GHCR
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker load -i docker-image.tar
+          IMAGE_REPO="ghcr.io/${GITHUB_REPOSITORY,,}"
+          IMAGE_TAG="${GITHUB_SHA}"
+          echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker tag rbpo-app:${GITHUB_SHA} "${IMAGE_REPO}:${IMAGE_TAG}"
+          docker tag rbpo-app:${GITHUB_SHA} "${IMAGE_REPO}:latest"
+          docker push "${IMAGE_REPO}:${IMAGE_TAG}"
+          docker push "${IMAGE_REPO}:latest"
